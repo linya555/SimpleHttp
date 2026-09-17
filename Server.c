@@ -172,7 +172,7 @@ int ParesRequestLine(const char* line,int cfd) {
 	// 因为程序员一般会把客户端要查找的文件放在当前进程工作目录下，
 	//当前进程工作目录需要在main函数里切换
 	char* temp = NULL;
-	if (strcmp(temp,"/")==0) {
+	if (strcmp(path,"/")==0) {
 		temp = "./";
 	}
 	else {
@@ -183,6 +183,7 @@ int ParesRequestLine(const char* line,int cfd) {
 	int ret = stat(temp, &st);
 	if (ret == -1) {
 		//文件不存在,回复404
+		printf("404\n");
 		SendHeadMsg(cfd, 404, "Not Found", GetFileType(".html"), -1);
 		//404.html这个文件需要我们自己加在main函数切换的目录文件夹里面
 		SendFile("404.html", cfd);
@@ -191,12 +192,14 @@ int ParesRequestLine(const char* line,int cfd) {
 	//判断路径文件是不是目录
 	if (S_ISDIR(st.st_mode)) {
 		//把目录内容发送给客户端
+		printf("dir\n");
 		SendHeadMsg(cfd, 200, "OK", GetFileType(".html"), st.st_size);
 		SendDir(temp, cfd);
 	}
 	else {
 		//把文件内容发送给客户端
 		//通过http响应发送文件
+		printf("file\n");
 		SendHeadMsg(cfd, 200, "OK", GetFileType(temp), st.st_size);
 		SendFile(temp,cfd);
 	}
@@ -225,18 +228,21 @@ int SendFile(char* filename,int cfd) {
 
 	}*/
 	int size=lseek(fd, 0, SEEK_SET);
+	lseek(fd, 0, SEEK_SET);
 	sendfile(cfd, fd, NULL, size);
 	close(fd);
 	return 0;
 }
 int SendHeadMsg(int cfd, int status, const char* descrip, char* type, int length) {
+	printf("SendHeadMsg\n");
 	char buf[4096];
 	//状态行
 	sprintf(buf, "http/1.1 %d %s\r\n", status, descrip);
 	//响应头+空行
 	sprintf(buf + strlen(buf), "Content-Type: %s\r\n", type);
-	sprintf(buf + strlen(buf), "Content-Length: %s\r\n\r\n", length);
+	sprintf(buf + strlen(buf), "Content-Length: %d\r\n\r\n", length);
 	send(cfd, buf, strlen(buf), 0);
+	printf("SendHeadMsg finish\n");
 	return 0;
 }
 
@@ -318,6 +324,7 @@ const char* GetFileType(const char* name)
 */
 int SendDir(char* dirname, int cfd) {
 	//拼接html网页头部
+	printf("senddir\n");
 	char buf[4096] = {0};
 	sprintf(buf, "<html><head><title>%s</title></head><body><table>", dirname);
 	//namelist（传出参数）指向指针数组 struct dirent* tmp[]，数组每一个元素都是一个指针，指向dirname下面的条目（文件或文件夹）
