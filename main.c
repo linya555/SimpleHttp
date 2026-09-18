@@ -7,13 +7,17 @@ int main(int argc,char* argv[]) {
 		printf("./a.out port path\n");
 		return -1;
 	}
-	//字符串转化成整形
+	//瀛楃涓茶浆鍖栨垚鏁村舰
 	unsigned short port = atoi(argv[1]);
-	//转换路径
-	chdir(argv[2]);
-	//初始化监听套接字
+	//杞崲璺緞
+	int ret = chdir(argv[2]);
+	if (ret == -1) {
+		perror("chdir");
+		return -1;
+	}
+	//鍒濆鍖栫洃鍚鎺ュ瓧
 	int lfd = InitListenFD(port);
-	//启动epoll
+	//鍚姩epoll
 	EpollRun(lfd);
 	return 0;
 }
