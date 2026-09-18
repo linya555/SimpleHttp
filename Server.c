@@ -227,9 +227,21 @@ int SendFile(char* filename,int cfd) {
 		}
 
 	}*/
-	int size = lseek(fd, 0, SEEK_END);
+	off_t offset = 0;
+	long size = lseek(fd, 0, SEEK_END);
 	lseek(fd, 0, SEEK_SET);
-	sendfile(cfd, fd, NULL, size);
+	//循环发送数据
+	while (offset<size) {
+		int ret=sendfile(cfd, fd,&offset, size-offset);
+		printf("ret value: %d\n", ret);
+		if (ret == -1 && errno == EAGAIN) {
+			printf("no pace to send\n");
+		}
+		else {
+			perror("sendfile");
+		}
+	}
+	
 	close(fd);
 	return 0;
 }
