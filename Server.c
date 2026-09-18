@@ -256,8 +256,9 @@ int SendFile(char* filename,int cfd) {
 		int ret=sendfile(cfd, fd,&offset, size-offset);
 		//休眠一下，防止缓冲区满了还往里面写东西
 		if (ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-		usleep(1000);
-		printf("ret value: %d\n", ret);
+			usleep(1000);
+			printf("ret value: %d\n", ret);
+		}
 		if (ret > 0) {
 			continue;
 		}
