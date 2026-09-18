@@ -16,3 +16,6 @@ int SendHeadMsg(int cfd,int status,const char* descrip,char* type,int length);
 const char* GetFileType(const char* name);
 //发送目录列表网页
 int SendDir(char* dirname, int cfd);
+//中文解码
+int hexToDec(char c);
+void decodeMsg(char* to, char* from);

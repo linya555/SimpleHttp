@@ -163,6 +163,9 @@ int ParesRequestLine(const char* line,int cfd) {
 	//用sscanf进行分割
 	sscanf(line, "%[^ ] %[^ ]", method, path);
 	printf("method=%s,path=%s\n", method, path);
+	//如果是中文，解码
+	decodeMsg(path, path);
+	printf("method=%s,path=%s\n", method, path);
 	//忽略大小写比较
 	if (strcasecmp(method, "get") != 0) {
 		printf("refuse http method not get\n");
@@ -233,6 +236,7 @@ int SendFile(char* filename,int cfd) {
 	//循环发送数据
 	while (offset<size) {
 		int ret=sendfile(cfd, fd,&offset, size-offset);
+		usleep(1000);
 		printf("ret value: %d\n", ret);
 		if (ret == -1 && errno == EAGAIN) {
 			printf("no pace to send\n");
@@ -380,5 +384,45 @@ int SendDir(char* dirname, int cfd) {
 	//namelist是一个指针数组malloc一块内存，用来存放一堆struct dirent*指针
 	free(namelist);
 	return 0;
+}
+// 将字符转换为整形数
+int hexToDec(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+
+	return 0;
+}
+
+// 解码
+// to 存储解码之后的数据, 传出参数, from被解码的数据, 传入参数
+void decodeMsg(char* to, char* from)
+{
+	for (; *from != '\0'; ++to, ++from)
+	{
+		// isxdigit -> 判断字符是不是16进制格式, 取值在 0-f
+		// Linux%E5%86%85%E6%A0%B8.jpg
+		if (from[0] == '%' && isxdigit(from[1]) && isxdigit(from[2]))
+		{
+			// 将16进制的数 -> 十进制 将这个数值赋值给了字符 int -> char
+			// B2 == 178
+			// 将3个字符, 变成了一个字符, 这个字符就是原始数据
+			*to = hexToDec(from[1]) * 16 + hexToDec(from[2]);
+
+			// 跳过 from[1] 和 from[2] 因此在当前循环中已经处理过了
+			from += 2;
+		}
+		else
+		{
+			// 字符拷贝, 赋值
+			*to = *from;
+		}
+
+	}
+	*to = '\0';
 }
 
