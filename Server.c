@@ -15,8 +15,13 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include <dirent.h>
+#include <pthread.h>
 
-
+struct FdInfo {
+	int fd;
+	int epfd;
+	pthread_t tid;
+};
 int InitListenFD(unsigned short port) {
 	//创建监听fd
 	int lfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -76,26 +81,34 @@ int EpollRun(int lfd) {
 			return -1;
 		}
 		for (int i = 0; i < num; i++) {
-			int fd = evs[i].data.fd;
+			struct FdInfo* info = (struct FdInfo*)malloc(sizeof(struct FdInfo));
+			info->fd = evs[i].data.fd;
+			info->epfd = epfd;
 			//接受连接
-			if (fd == lfd) {
+			if (info->fd == lfd) {
 				//与客户端连接并将获得的通信文件描述符添加到epll数上面
-				AcceptClient(lfd,epfd);
+				//AcceptClient(lfd,epfd);
+				//添加多线程//因为最后一个参数只能传一个指针，而AcceptClient有两个参数要传所以封装成一个结构体
+				printf("accept\n");
+				pthread_create(&info->tid, NULL, AcceptClient, info);
 			}
 			//进行通信
 			else {
 				//接收客户端http请求消息
-				RecieveHttpRequest(fd,epfd);
+				//RecieveHttpRequest(fd,epfd);
+				printf("connecting...\n");
+				pthread_create(&info->tid, NULL, RecieveHttpRequest, info);
 			}
 		}
 	}
 	return 0;
 }
-int AcceptClient(int lfd,int epfd) {
-	int cfd = accept(lfd, NULL, NULL);
+void* AcceptClient(void* arg) {
+	struct FdInfo* info = (struct FdInfo*)arg;
+	int cfd = accept(info->fd, NULL, NULL);
 	if (cfd == -1) {
 		perror("accept");
-		return -1;
+		return NULL;
 	}
 	//设置边沿非阻塞
 	int flag = fcntl(cfd, F_GETFL);
@@ -105,18 +118,21 @@ int AcceptClient(int lfd,int epfd) {
 	struct epoll_event ev;
 	ev.data.fd = cfd;
 	ev.events = EPOLLIN | EPOLLET;
-	int ret = epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &ev);
+	int ret = epoll_ctl(info->epfd, EPOLL_CTL_ADD, cfd, &ev);
 	if (ret == -1) {
 		perror("epoll_ctl");
-		return -1;
+		return NULL;
 	}
-	return 0;
+	printf("AcceptClient thread ID:%ld\n", info->tid);
+	free(info);
+	return NULL;
 }
-int RecieveHttpRequest(int fd,int epfd) {
+void* RecieveHttpRequest(void* arg) {
+	struct FdInfo* info = (struct FdInfo*)arg;
 	char buf[4096]={0};
 	char temp[1024] = { 0 };
 	int count = 0;
-	int len = read(fd, temp, sizeof(temp));
+	int len = read(info->fd, temp, sizeof(temp));
 	while (len > 0) {
 		if (count + len < sizeof(buf)) {
 			memcpy(buf + count, temp, len);
@@ -126,8 +142,9 @@ int RecieveHttpRequest(int fd,int epfd) {
 			printf("buf is full,request to large\n");
 			break;
 		}
-		len=read(fd, temp, sizeof(temp));
+		len=read(info->fd, temp, sizeof(temp));
 	}
+	printf("RecieveHttpRequest thread ID:%ld\n", info->tid);
 	//缓冲区数据读完了，可以解析http
 	if (len == -1 && errno == EAGAIN) {
 		int size = strlen(buf);
@@ -139,22 +156,23 @@ int RecieveHttpRequest(int fd,int epfd) {
 			}
 		}
 		//解析http请求行
-		ParesRequestLine(buf,fd);
+		ParesRequestLine(buf,info->fd);
 	}
 	else if (len == 0) {
 		//客户端断开连接
 		printf("client cut connecct\n");
 		//解除epoll树上对应通信文件描述符
-		int ret = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+		int ret = epoll_ctl(info->epfd, EPOLL_CTL_DEL, info->fd, NULL);
 		if (ret == -1) {
 			perror("epoll_ctl");
 		}
-		close(fd);
+		close(info->fd);
 	}
 	else {
 		perror("read");
 	}
-	return 0;
+	free(info);
+	return NULL;
 }
 int ParesRequestLine(const char* line,int cfd) {
 	// 解析请求行 get /xxx/1.jpg http/1.1
@@ -238,7 +256,10 @@ int SendFile(char* filename,int cfd) {
 		int ret=sendfile(cfd, fd,&offset, size-offset);
 		usleep(1000);
 		printf("ret value: %d\n", ret);
-		if (ret == -1 && errno == EAGAIN) {
+		if (ret > 0) {
+			continue;
+		}
+		else if (ret == -1 && errno == EAGAIN) {
 			printf("no pace to send\n");
 		}
 		else {
@@ -251,7 +272,7 @@ int SendFile(char* filename,int cfd) {
 }
 int SendHeadMsg(int cfd, int status, const char* descrip, char* type, int length) {
 	printf("SendHeadMsg\n");
-	char buf[4096];
+	char buf[4096] = {0};
 	//状态行
 	sprintf(buf, "http/1.1 %d %s\r\n", status, descrip);
 	//响应头+空行
