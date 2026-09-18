@@ -334,6 +334,11 @@ int SendDir(char* dirname, int cfd) {
 	for (int i = 0; i < num; i++) {
 		char subPath[1024] = {0};
 		char* name = namelist[i]->d_name;
+		//跳过 . 和 .. 这两个特殊目录条目，不显示在网页上
+		if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+			free(namelist[i]);
+			continue;
+		}
 		//拼接路径
 		sprintf(subPath, "%s/%s", dirname, name);
 		struct stat st;
