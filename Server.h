@@ -4,9 +4,9 @@ int InitListenFD(unsigned short port);
 //启动epoll
 int EpollRun(int lfd);
 //接收连接
-int AcceptClient(int lfd, int epfd);
+void* AcceptClient(void* arg);
 //接收客户端http请求消息
-int RecieveHttpRequest(int fd, int epfd);
+void* RecieveHttpRequest(void* arg);
 //解析http
 int ParesRequestLine(const char* line, int cfd);
 //把文件内容发送给客户端（http响应第四部分 响应数据）
